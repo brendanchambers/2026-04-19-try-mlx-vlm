@@ -1,0 +1,9 @@
+[project]
+name = "2026-04-19-try-mlx-vlm"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mlx-vlm>=0.0.1",
+]
