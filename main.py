@@ -28,14 +28,10 @@ MAX_TOKENS = 500
 TEMPERATURE = 0.7
 
 
-def main():
-    """Analyze an image using mlx-vlm and generate a text description."""
-    console = Console()
-
-    # Create timestamp-based subdirectory
+def setup_request_directory(console: Console) -> tuple[str, Path]:
+    """Create timestamped request directory and display header."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    requests_dir = Path("requests")
-    request_dir = requests_dir / timestamp
+    request_dir = Path("requests") / timestamp
     request_dir.mkdir(parents=True, exist_ok=True)
 
     console.print(Panel.fit(
@@ -45,40 +41,52 @@ def main():
         border_style="cyan"
     ))
 
-    # Download and save image
+    return timestamp, request_dir
+
+
+def download_image(image_url: str, request_dir: Path, console: Console) -> Path:
+    """Download image from URL and save to request directory."""
     image_path = request_dir / "image.jpg"
     console.print(f"\n[cyan]Downloading image...[/cyan]")
-    urllib.request.urlretrieve(IMAGE_URL, image_path)
+    urllib.request.urlretrieve(image_url, image_path)
     console.print(f"[green]✓[/green] Image saved to: {image_path}")
+    return image_path
 
-    # Load model
+
+def load_vlm_model(console: Console):
+    """Load the vision-language model and processor."""
     console.print(f"\n[cyan]Loading model...[/cyan]")
     model, processor = load(MODEL_NAME)
     config = load_config(MODEL_NAME)
     console.print(f"[green]✓[/green] Model loaded")
+    return model, processor, config
 
-    # Prepare prompt
+
+def analyze_image(model, processor, config, image_url: str, prompt: str, console: Console):
+    """Run model inference on the image."""
     console.print(f"\n[cyan]Analyzing image...[/cyan]")
-    console.print(f"Prompt: [italic]{PROMPT}[/italic]\n")
+    console.print(f"Prompt: [italic]{prompt}[/italic]\n")
 
     formatted_prompt = apply_chat_template(
-        processor, config, PROMPT, num_images=1
+        processor, config, prompt, num_images=1
     )
 
-    # Generate description
-    image = [IMAGE_URL]
     output = generate(
         model,
         processor,
         formatted_prompt,
-        image,
+        [image_url],
         verbose=False,
         max_tokens=MAX_TOKENS,
         temperature=TEMPERATURE,
     )
 
-    # Extract output data
-    output_data = {
+    return output
+
+
+def create_output_data(output, timestamp: str) -> dict:
+    """Extract and structure model output into a dictionary."""
+    return {
         "text": output.text,
         "token": int(output.token),
         "prompt_tokens": int(output.prompt_tokens),
@@ -93,14 +101,20 @@ def main():
         "prompt": PROMPT,
     }
 
-    # Save output to JSON file
+
+def save_output(output_data: dict, request_dir: Path, console: Console) -> Path:
+    """Save output data to JSON file."""
     output_file = request_dir / "output.json"
     with open(output_file, "w") as f:
         json.dump(output_data, f, indent=2)
 
     console.print(f"[green]✓[/green] Output saved to: {output_file}\n")
+    return output_file
 
-    # Display results with rich formatting
+
+def display_results(output_data: dict, request_dir: Path, console: Console):
+    """Display formatted results using rich."""
+    # Display model response
     console.print(Panel(
         output_data["text"],
         title="[bold yellow]Model Response[/bold yellow]",
@@ -108,7 +122,7 @@ def main():
         padding=(1, 2)
     ))
 
-    # Display metrics in a table
+    # Display performance metrics
     table = Table(title="Performance Metrics", show_header=True)
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="green")
@@ -129,6 +143,19 @@ def main():
 
     console.print(f"\n[green]✓ Analysis complete![/green]")
     console.print(f"[dim]Results saved to: {request_dir}[/dim]")
+
+
+def main():
+    """Analyze an image using mlx-vlm and generate a text description."""
+    console = Console()
+
+    timestamp, request_dir = setup_request_directory(console)
+    download_image(IMAGE_URL, request_dir, console)
+    model, processor, config = load_vlm_model(console)
+    output = analyze_image(model, processor, config, IMAGE_URL, PROMPT, console)
+    output_data = create_output_data(output, timestamp)
+    save_output(output_data, request_dir, console)
+    display_results(output_data, request_dir, console)
 
 
 if __name__ == "__main__":
